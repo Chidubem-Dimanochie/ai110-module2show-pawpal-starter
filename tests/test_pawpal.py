@@ -143,3 +143,229 @@ def test_conflict_warnings_label_same_pet_and_cross_pet():
     joined = " ".join(warnings)
     assert "for Biscuit" in joined            # same-pet clash labeled
     assert "Biscuit vs Mochi" in joined or "Mochi vs Biscuit" in joined  # cross-pet
+
+
+# ---------------------------------------------------------------------------
+# Budget-constrained planning (Scheduler.generate_plan)
+# ---------------------------------------------------------------------------
+
+def test_task_exactly_equal_to_budget_is_included():
+    """A task whose duration equals the remaining budget still fits (<= boundary)."""
+    scheduler = Scheduler(time_budget=30)
+    scheduler.generate_plan([Task("Walk", 30, "high")])
+
+    assert [t.title for t in scheduler.planned_tasks] == ["Walk"]
+    assert scheduler.skipped_tasks == []
+
+
+def test_task_one_minute_over_budget_is_skipped():
+    """A task one minute larger than the budget is skipped, not planned."""
+    scheduler = Scheduler(time_budget=29)
+    scheduler.generate_plan([Task("Walk", 30, "high")])
+
+    assert scheduler.planned_tasks == []
+    assert [t.title for t in scheduler.skipped_tasks] == ["Walk"]
+
+
+def test_zero_budget_skips_everything():
+    """With no time available, every task is skipped and nothing crashes."""
+    scheduler = Scheduler(time_budget=0)
+    scheduler.generate_plan([Task("Walk", 30, "high"), Task("Feed", 10, "high")])
+
+    assert scheduler.planned_tasks == []
+    assert len(scheduler.skipped_tasks) == 2
+
+
+def test_planning_orders_by_priority_then_shorter_duration():
+    """High priority goes first; ties are broken by shorter duration."""
+    scheduler = Scheduler(time_budget=1000)
+    tasks = [
+        Task("Long high", 40, "high"),
+        Task("Low", 5, "low"),
+        Task("Short high", 10, "high"),
+    ]
+    scheduler.generate_plan(tasks)
+
+    # Both highs before the low; among highs, the shorter one first.
+    assert [t.title for t in scheduler.planned_tasks] == ["Short high", "Long high", "Low"]
+
+
+def test_done_tasks_are_excluded_from_planning():
+    """An already-completed task appears in neither planned nor skipped lists."""
+    scheduler = Scheduler(time_budget=1000)
+    done = Task("Already fed", 10, "high")
+    done.mark_done()
+    scheduler.generate_plan([done, Task("Walk", 30, "high")])
+
+    titles = {t.title for t in scheduler.planned_tasks + scheduler.skipped_tasks}
+    assert titles == {"Walk"}
+
+
+# ---------------------------------------------------------------------------
+# Conflict-detection boundaries (Task.overlaps / Scheduler.detect_conflicts)
+# ---------------------------------------------------------------------------
+
+def test_adjacent_tasks_do_not_conflict():
+    """A task ending at 08:30 does not clash with one starting at 08:30 (half-open)."""
+    scheduler = Scheduler(time_budget=120)
+    first = Task("Walk", 30, "high", start_time="08:00")   # 08:00-08:30
+    second = Task("Feed", 10, "high", start_time="08:30")  # 08:30-08:40
+
+    assert scheduler.detect_conflicts([first, second]) == []
+
+
+def test_untimed_task_never_conflicts():
+    """A task with no start_time cannot overlap a timed task."""
+    scheduler = Scheduler(time_budget=120)
+    timed = Task("Walk", 30, "high", start_time="08:00")
+    untimed = Task("Groom", 30, "low")
+
+    assert scheduler.detect_conflicts([timed, untimed]) == []
+
+
+def test_three_same_time_tasks_yield_three_pairs():
+    """Three overlapping tasks produce all three unordered pairs."""
+    scheduler = Scheduler(time_budget=120)
+    tasks = [
+        Task("A", 10, "high", start_time="08:00"),
+        Task("B", 10, "high", start_time="08:00"),
+        Task("C", 10, "high", start_time="08:00"),
+    ]
+
+    assert len(scheduler.detect_conflicts(tasks)) == 3
+
+
+def test_detect_conflicts_on_empty_list_is_empty():
+    """No tasks means no conflicts, no crash."""
+    scheduler = Scheduler(time_budget=120)
+    assert scheduler.detect_conflicts([]) == []
+
+
+# ---------------------------------------------------------------------------
+# Recurrence / due-date boundaries (Task.is_due, Pet.complete_task)
+# ---------------------------------------------------------------------------
+
+def test_is_due_on_exact_due_date():
+    """A task is due exactly on its due_date (<= boundary)."""
+    today = date(2026, 7, 8)
+    task = Task("Feeding", 10, "high", frequency="daily")
+    task.due_date = today.isoformat()
+
+    assert task.is_due(today) is True
+
+
+def test_is_due_day_before_due_date_is_false():
+    """A task dated for tomorrow is not yet due today."""
+    today = date(2026, 7, 8)
+    task = Task("Feeding", 10, "high", frequency="daily")
+    task.due_date = (today + timedelta(days=1)).isoformat()
+
+    assert task.is_due(today) is False
+
+
+def test_complete_unknown_task_id_returns_none():
+    """Completing a nonexistent task id returns None and adds nothing."""
+    pet = Pet("Biscuit", "dog", "Golden Retriever")
+    pet.add_task(Task("Feeding", 10, "high", frequency="daily"))
+
+    result = pet.complete_task(9999, on=date(2026, 7, 8))
+
+    assert result is None
+    assert len(pet.tasks) == 1
+
+
+# ---------------------------------------------------------------------------
+# Empty / degenerate inputs
+# ---------------------------------------------------------------------------
+
+def test_pet_with_no_tasks_has_empty_task_views():
+    """A pet with no tasks reports empty pending and completed lists."""
+    pet = Pet("Ghost", "cat", "Unknown")
+
+    assert pet.pending_tasks() == []
+    assert pet.completed_tasks() == []
+
+
+def test_owner_with_no_pets_plans_empty_without_crashing():
+    """An owner with no pets produces an empty plan and no tasks."""
+    owner = Owner("Jordan", minutes_available=60)
+    scheduler = Scheduler(time_budget=owner.minutes_available)
+    scheduler.plan_for_owner(owner)
+
+    assert owner.all_tasks() == []
+    assert owner.due_tasks(date(2026, 7, 8)) == []
+    assert scheduler.planned_tasks == []
+
+
+# ---------------------------------------------------------------------------
+# Sorting with mixed timed / untimed tasks (Scheduler.sort_by_time)
+# ---------------------------------------------------------------------------
+
+def test_sort_by_time_puts_untimed_tasks_last():
+    """Timed tasks come out chronologically; untimed tasks sink to the end."""
+    scheduler = Scheduler(time_budget=120)
+    tasks = [
+        Task("Untimed", 10, "low"),
+        Task("Late", 10, "high", start_time="18:00"),
+        Task("Early", 10, "high", start_time="08:00"),
+    ]
+
+    ordered = [t.title for t in scheduler.sort_by_time(tasks)]
+
+    assert ordered == ["Early", "Late", "Untimed"]
+
+
+# ===========================================================================
+# Required categories (explicit, one test per requirement)
+# ===========================================================================
+
+def test_sorting_correctness_chronological_order():
+    """REQUIRED: Sorting Correctness.
+
+    sort_by_time must return timed tasks in ascending time-of-day order,
+    regardless of the order they were added in.
+    """
+    scheduler = Scheduler(time_budget=120)
+    tasks = [
+        Task("Evening walk", 30, "high", start_time="18:00"),
+        Task("Feeding", 10, "high", start_time="08:00"),
+        Task("Midday play", 15, "medium", start_time="12:30"),
+    ]
+
+    ordered = [t.start_time for t in scheduler.sort_by_time(tasks)]
+
+    assert ordered == ["08:00", "12:30", "18:00"]
+
+
+def test_recurrence_daily_complete_creates_next_day_task():
+    """REQUIRED: Recurrence Logic.
+
+    Marking a daily task complete must create a new task due the following day.
+    """
+    today = date(2026, 7, 8)
+    pet = Pet("Biscuit", "dog", "Golden Retriever")
+    pet.add_task(Task("Feeding", 10, "high", frequency="daily"))
+    original = pet.tasks[0]
+
+    upcoming = pet.complete_task(original.id, on=today)
+
+    assert original.done is True                       # old one is finished
+    assert len(pet.tasks) == 2                         # a new one was added
+    assert upcoming.done is False                      # the new one is not done
+    assert upcoming.due_date == "2026-07-09"           # due the following day
+
+
+def test_conflict_detection_flags_duplicate_times():
+    """REQUIRED: Conflict Detection.
+
+    The Scheduler must flag two tasks scheduled at the exact same time.
+    """
+    scheduler = Scheduler(time_budget=120)
+    walk = Task("Walk", 30, "high", start_time="08:00")
+    feed = Task("Feed", 10, "high", start_time="08:00")
+
+    conflicts = scheduler.detect_conflicts([walk, feed])
+
+    assert len(conflicts) == 1
+    clashing = {conflicts[0][0].title, conflicts[0][1].title}
+    assert clashing == {"Walk", "Feed"}

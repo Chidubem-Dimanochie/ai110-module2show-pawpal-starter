@@ -64,19 +64,57 @@ Skipped (not enough time):
 
 ## 🧪 Testing PawPal+
 
+Run the full test suite from the project root:
+
 ```bash
-# Run the full test suite:
-pytest
-
-# Run with coverage:
-pytest --cov
+python -m pytest
 ```
 
-Sample test output:
+### What the tests cover
+
+The 27 tests in `tests/test_pawpal.py` exercise the logic layer in
+`pawpal_system.py` across happy paths and edge cases:
+
+- **Sorting correctness** — tasks come back in chronological order by
+  `start_time`, shortest-duration first, and untimed tasks sink to the end
+  instead of crashing.
+- **Recurrence logic** — completing a daily task marks it done and spawns a
+  fresh occurrence due the following day; weekly tasks land 7 days out; `once`
+  tasks never regenerate; `is_due` boundaries (on/before the due date).
+- **Conflict detection** — duplicate/overlapping start times are flagged,
+  adjacent non-overlapping tasks are not (half-open intervals), untimed tasks
+  never conflict, and three same-time tasks produce three pairs.
+- **Budget-constrained planning** — exact-fit and one-over-budget boundaries,
+  zero budget, priority + duration tie-breaking, and exclusion of already-done
+  tasks.
+- **Filtering & degenerate inputs** — filtering by pet/status/priority, plus a
+  pet with no tasks and an owner with no pets (no crashes, empty plans).
+
+### Successful test run
 
 ```
-# Paste your pytest output here
+============================= test session starts =============================
+platform win32 -- Python 3.14.5, pytest-9.1.1, pluggy-1.6.0
+rootdir: C:\Users\Somdu\OneDrive\Desktop\Coding\CodePath\AI110\ai110-module2show-pawpal-starter
+collected 27 items
+
+tests\test_pawpal.py ...........................                         [100%]
+
+============================= 27 passed in 0.02s ==============================
 ```
+
+### Confidence Level
+
+**★★★★☆ (4 / 5)**
+
+All 27 tests pass, covering every core behavior — sorting, recurrence, conflict
+detection, and budget-constrained planning — including boundary cases (exact-fit
+budgets, half-open time intervals, on/before due dates) and degenerate inputs
+(no pets, no tasks). I'm holding back the fifth star because one behavior remains
+unspecified rather than proven: `Task.next_occurrence` dates the next occurrence
+from *when the task was completed*, not from its original `due_date`, so a
+late-completed recurring task drifts. Once that intended behavior is decided and
+pinned with a test, this moves to 5/5.
 
 ## 📐 Smarter Scheduling
 
