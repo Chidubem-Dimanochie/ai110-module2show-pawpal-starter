@@ -2,6 +2,16 @@
 
 ## 1. System Design
 
+**Core user actions**
+
+These are the three core actions a user should be able to perform in PawPal+:
+
+1. **Set a priority on each task.** Every care task the user adds has a level of importance (for example: high, medium, low). This priority system lets the scheduler decide which tasks matter most when time is limited, so the essentials get done first.
+
+2. **Create accounts for different pets.** The user can add multiple accounts for various pets, each with its own species and breed. This keeps each pet's care separate and lets the owner manage several animals from one app.
+
+3. **Track what's done and what's left.** The user can see which tasks have been completed and which still need to be done, so it's always clear what remains for the day.
+
 **a. Initial design**
 
 - Briefly describe your initial UML design.
