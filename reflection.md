@@ -14,13 +14,28 @@ These are the three core actions a user should be able to perform in PawPal+:
 
 **a. Initial design**
 
-- Briefly describe your initial UML design.
-- What classes did you include, and what responsibilities did you assign to each?
+My initial UML design has four classes:
+
+- **Owner** — holds the user's info (name, minutes available per day) and their list of pets. Responsible for adding/removing pets and requesting a plan.
+- **Pet** — holds a pet's info (name, species, breed) and its list of tasks. Responsible for adding, removing, and editing its own tasks.
+- **Task** — represents a single care task (title, duration, priority, done status). Responsible for marking itself done and editing its details.
+- **Schedule** — takes a pet's tasks and the owner's time budget and builds the daily plan. Responsible for sorting tasks by priority and generating the schedule.
+
+An Owner owns many Pets, a Pet has many Tasks, and the Schedule uses those Tasks to produce the plan.
 
 **b. Design changes**
 
-- Did your design change during implementation?
-- If yes, describe at least one change and why you made it.
+Yes. After reviewing my skeleton, I made four changes so the classes would actually support the behavior I wanted:
+
+1. **Gave `Task` a unique `id`.** Because `Task` is a dataclass, two tasks with the same title, duration, and priority counted as equal. That meant removing or editing a task could hit the wrong one when a pet had look-alike tasks. Each task now gets a unique id from a counter, and `remove_task`/`edit_task` take a `task_id` instead of a whole `Task` object so they always target the right one.
+
+2. **Settled how `Schedule.generate_plan` works.** Originally it was unclear whether the plan was built in the constructor, by mutating the object, or by returning a new one. I standardized on: `generate_plan` fills in the schedule and returns `self`. This keeps one clear pattern instead of two competing ones.
+
+3. **Added `skipped_tasks` to `Schedule`.** The old design only stored the tasks that made it into the plan, so when a task got dropped for lack of time it just disappeared. Since a core goal is explaining *why* the plan looks the way it does, I now keep the left-out tasks so the UI can show what was skipped and why.
+
+4. **Made `done` actually matter.** `Task.done` existed but nothing used it. `generate_plan` now skips tasks that are already done before scheduling, which supports the "track what's done vs. what's left" action.
+
+I also added a `PRIORITY_ORDER` mapping so priority sorting is well-defined instead of relying on raw string comparison, and gave `Schedule` an optional reference to its `Pet` so a plan knows which pet it belongs to (useful for labeled output like "Daily plan for Biscuit").
 
 ---
 
