@@ -37,6 +37,14 @@ Yes. After reviewing my skeleton, I made four changes so the classes would actua
 
 I also added a `PRIORITY_ORDER` mapping so priority sorting is well-defined instead of relying on raw string comparison, and gave `Schedule` an optional reference to its `Pet` so a plan knows which pet it belongs to (useful for labeled output like "Daily plan for Biscuit").
 
+<!-- AI-ASSISTED NOTES (Phase 3 logic additions) — edit/trim as needed -->
+> **Phase 3 additions (AI-assisted, to fold into the write-up above):**
+> - **Sorting by time.** Added `Scheduler.sort_by_time()` (chronological by `start_time`) and `Scheduler.sort_by_duration()` (shortest-first) alongside the original `sort_by_priority()`. `sort_by_time` uses a `sorted()` lambda key on `start_minutes()` so untimed tasks fall to the end instead of raising a `TypeError` when `None` is compared to a string.
+> - **Filtering.** Added `Owner.filter_tasks(pet_name=, done=, priority=)` as one flexible entry point (any arg left `None` is ignored), plus `Pet.pending_tasks()` / `Pet.completed_tasks()` helpers.
+> - **Time-of-day + conflicts.** Gave `Task` an optional `start_time` ("HH:MM") with `start_minutes()`/`end_minutes()`/`overlaps()` helpers, and added `Scheduler.detect_conflicts()` which flags pairs of planned tasks whose windows overlap. It sorts by start time and breaks early once a task starts after the current one ends (avoids blind O(n²) checking). `explain()` now prints conflicts.
+> - **Recurring tasks.** The previously-unused `Task.frequency` now drives recurrence. Added `Task.due_date`, reworked `Task.is_due(today)` to a per-occurrence model (a done task is never due again; a pending one is due once `today` reaches its `due_date`), and added `Task.next_occurrence(completed_on)` — a factory that returns a fresh Task due `completed_on + timedelta(days=1)` (daily) or `+7` (weekly), or `None` for `"once"`.
+> - **Completion → regeneration.** Added `Pet.complete_task(task_id, on)` which marks a task done *and* auto-appends the next occurrence. This is where completion and `frequency` interact.
+
 ---
 
 ## 2. Scheduling Logic and Tradeoffs
@@ -46,10 +54,22 @@ I also added a `PRIORITY_ORDER` mapping so priority sorting is well-defined inst
 - What constraints does your scheduler consider (for example: time, priority, preferences)?
 - How did you decide which constraints mattered most?
 
+<!-- AI-ASSISTED NOTES — edit/trim as needed -->
+> **Constraints now considered (AI-assisted additions):** total time budget (`minutes_available`), task `priority` (via `PRIORITY_ORDER`), whether a task is already `done`, time of day / overlapping `start_time` windows (`detect_conflicts`), and recurrence — only tasks that are actually due today are planned when `plan_for_owner(owner, today=...)` is used.
+
 **b. Tradeoffs**
 
 - Describe one tradeoff your scheduler makes.
 - Why is that tradeoff reasonable for this scenario?
+
+<!-- AI-ASSISTED NOTES — edit/trim as needed -->
+> **Tradeoffs in the current logic (AI-assisted additions):**
+> - The planner still packs greedily by priority/budget and only *reports* time conflicts via `detect_conflicts()` / `conflict_warnings()` — it does not automatically reschedule overlapping tasks. Reasonable because surfacing the conflict lets the owner decide, which is simpler and more transparent than auto-moving tasks.
+> - **Lightweight conflict warnings.** `Scheduler.conflict_warnings(owner=None)` returns a list of plain warning *strings* (never raises), one per overlapping pair, labeling whether the clash is within one pet ("for Biscuit") or across two ("Biscuit vs Mochi"). Chose returning messages over throwing so the program keeps running and the UI/terminal can just print the warnings.
+
+<!-- Documented tradeoff (Step 5) — edit as needed -->
+> **One tradeoff, explained.** Conflict detection only looks at tasks that have an explicit `start_time`; a task with no fixed time can never trigger a warning, even if the day is over-booked. I chose to detect *overlapping durations* (start → start+duration) rather than only *exact* start-time matches, so a 30-min task starting at 08:00 correctly clashes with one at 08:15. The tradeoff is that untimed tasks are invisible to conflict checking — reasonable here because most flexible chores (grooming, play) genuinely don't have a fixed clock time, and forcing one on them would create false conflicts. A related tradeoff: `detect_conflicts()` compares every timed pair (O(n²)); I kept that for readability since a single day holds only a handful of timed tasks.
+> - `Pet.complete_task` leaves the finished instance in the list (marked done) *and* adds the successor, so completed tasks accumulate over time. Tradeoff: preserves history for `filter_tasks(done=True)` at the cost of a growing list.
 
 ---
 
@@ -73,6 +93,9 @@ I also added a `PRIORITY_ORDER` mapping so priority sorting is well-defined inst
 
 - What behaviors did you test?
 - Why were these tests important?
+
+<!-- AI-ASSISTED NOTES — edit/trim as needed -->
+> **Tests added (AI-assisted, in `tests/test_pawpal.py`):** `sort_by_duration` ordering; `filter_tasks` by pet + status; `detect_conflicts` flagging overlapping start times; completing a daily task spawning a next occurrence due tomorrow (`test_completing_daily_task_spawns_next_occurrence`); a weekly successor being due `+7` days and not sooner; and a `"once"` task producing no successor. Suite is currently 8 passing tests.
 
 **b. Confidence**
 

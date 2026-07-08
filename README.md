@@ -80,14 +80,53 @@ Sample test output:
 
 ## 📐 Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
+Beyond the basic "pack by priority" plan, PawPal+ adds four pieces of smarter
+scheduling logic. Each row names the exact method that implements it (all in
+`pawpal_system.py`).
 
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+| Task sorting | `Scheduler.sort_by_time()`, `Scheduler.sort_by_duration()`, `Scheduler.sort_by_priority()` | Chronological (by `start_time`), shortest-first (by duration), or highest-priority-first |
+| Filtering | `Owner.filter_tasks()`, `Pet.pending_tasks()`, `Pet.completed_tasks()` | Filter by pet name, completion status, and/or priority |
+| Conflict handling | `Scheduler.detect_conflicts()`, `Scheduler.conflict_warnings()`, `Task.overlaps()` | Flags overlapping time windows (same or different pets); returns warning strings instead of crashing |
+| Recurring tasks | `Task.is_due()`, `Task.next_occurrence()`, `Pet.complete_task()` | Completing a daily/weekly task auto-creates the next occurrence (`today + timedelta`) |
+
+### Sorting behavior
+
+- **`Scheduler.sort_by_time(tasks)`** — orders tasks chronologically by their
+  `start_time` (`"HH:MM"`). Untimed tasks (`start_time is None`) sort to the end
+  instead of raising an error.
+- **`Scheduler.sort_by_duration(tasks)`** — orders by time cost, shortest first.
+- **`Scheduler.sort_by_priority(tasks)`** — highest priority first, ties broken by
+  shorter duration.
+
+### Filtering behavior
+
+- **`Owner.filter_tasks(pet_name=None, done=None, priority=None)`** — one flexible
+  entry point; any argument left `None` is ignored, so
+  `owner.filter_tasks(pet_name="Mochi", done=False)` returns Mochi's outstanding
+  tasks.
+- **`Pet.pending_tasks()` / `Pet.completed_tasks()`** — quick status filters on a
+  single pet.
+
+### Conflict detection logic
+
+- **`Task.overlaps(other)`** — half-open interval test on
+  `[start, start + duration)`; untimed tasks never conflict.
+- **`Scheduler.detect_conflicts(tasks=None)`** — returns every pair of planned
+  tasks whose windows overlap (defaults to `planned_tasks`).
+- **`Scheduler.conflict_warnings(owner=None)`** — lightweight: turns each conflict
+  into a readable warning **string** (never raises), noting whether the clash is
+  within one pet (`for Biscuit`) or across two (`Biscuit vs Mochi`).
+
+### Recurring task logic
+
+- **`Task.is_due(today)`** — a done task is never due again; a pending task is due
+  once `today` reaches its `due_date`.
+- **`Task.next_occurrence(completed_on)`** — factory returning a fresh Task due
+  `completed_on + timedelta(days=1)` (daily) or `+7` (weekly); `None` for `"once"`.
+- **`Pet.complete_task(task_id, on)`** — marks a task done **and** auto-appends its
+  next occurrence, so recurring chores reschedule themselves.
 
 ## 📸 Demo Walkthrough
 
