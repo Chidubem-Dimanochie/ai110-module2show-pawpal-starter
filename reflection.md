@@ -77,13 +77,64 @@ I also added a `PRIORITY_ORDER` mapping so priority sorting is well-defined inst
 
 **a. How you used AI**
 
-- How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
-- What kinds of prompts or questions were most helpful?
+I used my AI coding assistant across every phase, but for different jobs each time. In the
+**design** phase it was a brainstorming partner: I described the four classes and asked it to
+poke holes in the responsibilities before I wrote any logic. In the **build** phase it did
+multi-step refactoring and feature wiring — for example, connecting the `Scheduler` methods
+into `app.py` and keeping the UML source in sync with the final code. In the **testing** phase
+it generated the first pass of the pytest suite and brainstormed edge cases I hadn't considered
+(exact-fit budgets, adjacent-but-not-overlapping times, empty pet lists).
+
+The most helpful prompts were **specific and file-grounded**: attaching `pawpal_system.py` and
+asking a pointed question like *"what are the most important edge cases to test for a scheduler
+with sorting and recurring tasks?"* got far better answers than a vague *"write some tests."*
+Asking it to *explain* code before I saved it (rather than just accept it) was also key — it
+turned the assistant into a tutor instead of a black box.
 
 **b. Judgment and verification**
 
-- Describe one moment where you did not accept an AI suggestion as-is.
-- How did you evaluate or verify what the AI suggested?
+I verified AI output by **running it**, not just reading it: every generated test had to pass
+(`python -m pytest`), and I ran `python main.py` end-to-end to confirm the behavior matched the
+description. When the assistant flagged a possible late-completion recurrence bug, I treated it
+as a claim to check rather than a fact — I traced `next_occurrence` myself and decided it was an
+*unspecified* behavior, not a defect, and left it documented instead of silently "fixing" it.
+
+One moment I did not accept a suggestion as-is: for `detect_conflicts`, the assistant proposed an
+early-exit sweep (sort by start time, then break out of the inner loop once a task starts after
+the current one ends) to avoid a blind O(n²) scan. I **rejected the optimization** and kept the
+plain `combinations()` version, because a single day only ever holds a handful of timed tasks, so
+the clever version added branching and off-by-one risk for a speedup nobody would ever notice.
+Keeping it simple made the method easier to read and test.
+
+**c. AI Strategy**
+
+*Which AI coding assistant features were most effective for building your scheduler?*
+
+Three features carried the most weight. (1) **File-attached chat / context** — pointing the
+assistant at `pawpal_system.py` so its suggestions matched my actual class names and signatures
+instead of a generic template. (2) **Agentic multi-file edits** — having it make coordinated
+changes across `app.py`, `tests/test_pawpal.py`, the UML `.mmd`, and the README in one pass,
+which kept everything consistent. (3) **Test scaffolding + edge-case brainstorming** — it turned
+9 starter tests into 27 by surfacing boundary cases (budget exactly equal to a task's duration,
+half-open time intervals, a pet with no tasks) that I would likely have missed.
+
+*One AI suggestion I rejected or modified to keep the design clean.*
+
+Beyond the `detect_conflicts` optimization above, the assistant at one point suggested letting the
+`Scheduler` automatically **reschedule** conflicting tasks. I modified that down to *reporting*
+conflicts only (`conflict_warnings` returns plain strings and never raises). Auto-rescheduling
+would have blurred the `Scheduler`'s responsibility — it should detect and explain, not silently
+move the owner's tasks around. Keeping "detect vs. decide" separate kept the class focused and the
+behavior transparent to the user.
+
+*How separate chat sessions for different phases helped me stay organized.*
+
+I ran a different chat session per phase — design/UML, logic build, testing, UI, and docs. This
+kept each conversation's context tight, so the assistant wasn't juggling test details while I was
+still deciding class responsibilities. It also mirrored the project's phase structure, which made
+it easy to go back and re-read the reasoning behind one phase without scrolling through everything
+else, and it stopped the model from conflating concerns across phases (e.g., proposing UI code
+while I only wanted to talk about the data model).
 
 ---
 

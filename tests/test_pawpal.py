@@ -355,6 +355,36 @@ def test_recurrence_daily_complete_creates_next_day_task():
     assert upcoming.due_date == "2026-07-09"           # due the following day
 
 
+def test_priority_then_time_sorting():
+    """Enhanced sort: highest priority first, chronological within each level."""
+    scheduler = Scheduler(time_budget=1000)
+    tasks = [
+        Task("Med walk", 20, "medium", start_time="07:00"),  # earliest, but medium
+        Task("High late", 10, "high", start_time="09:00"),
+        Task("High early", 10, "high", start_time="08:00"),
+        Task("Low", 5, "low", start_time="06:00"),
+    ]
+
+    ordered = [t.title for t in scheduler.sort_by_priority_then_time(tasks)]
+
+    # Highs (chronological) -> medium -> low, even though Low/Med start earlier.
+    assert ordered == ["High early", "High late", "Med walk", "Low"]
+
+
+def test_generated_plan_is_ordered_priority_then_time():
+    """A built plan presents tasks priority-first, then by start time."""
+    scheduler = Scheduler(time_budget=1000)
+    scheduler.generate_plan([
+        Task("Evening meds", 5, "high", start_time="18:00"),
+        Task("Morning feed", 10, "high", start_time="08:00"),
+        Task("Midday play", 15, "medium", start_time="12:00"),
+    ])
+
+    assert [t.title for t in scheduler.planned_tasks] == [
+        "Morning feed", "Evening meds", "Midday play"
+    ]
+
+
 def test_conflict_detection_flags_duplicate_times():
     """REQUIRED: Conflict Detection.
 

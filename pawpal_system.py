@@ -288,6 +288,23 @@ class Scheduler:
             key=lambda t: (-PRIORITY_ORDER.get(t.priority, 0), t.duration_minutes),
         )
 
+    def sort_by_priority_then_time(self, tasks: list[Task]) -> list[Task]:
+        """Return tasks ordered by priority first, then by time of day.
+
+        This is the schedule's presentation order: the most important tasks
+        come first (high -> medium -> low via :data:`PRIORITY_ORDER`), and within
+        a single priority level tasks run in chronological order of their
+        ``start_time``. Untimed tasks sort to the end of their priority band
+        (``float("inf")``) instead of raising when ``None`` meets a number.
+        """
+        return sorted(
+            tasks,
+            key=lambda t: (
+                -PRIORITY_ORDER.get(t.priority, 0),
+                t.start_minutes() if t.start_time else float("inf"),
+            ),
+        )
+
     def sort_by_duration(self, tasks: list[Task]) -> list[Task]:
         """Return tasks ordered by time cost (shortest first).
 
@@ -359,10 +376,14 @@ class Scheduler:
     def generate_plan(self, tasks: list[Task]) -> "Scheduler":
         """Fill in the plan from ``tasks``, respecting the time budget.
 
-        Skips tasks that are already done, sorts the rest by priority, then
-        greedily adds tasks until the budget runs out. Tasks that don't fit
-        go to ``skipped_tasks``. Finally flags any time-of-day conflicts among
-        the planned tasks. Mutates and returns ``self``.
+        Skips tasks that are already done. *Selects* tasks by priority (with
+        shorter duration breaking ties, so the most high-value tasks fit the
+        budget), greedily adding until the budget runs out; tasks that don't fit
+        go to ``skipped_tasks``. The kept tasks are then *presented* in
+        priority-then-time order via :meth:`sort_by_priority_then_time`, so the
+        plan reads most-important-first and chronologically within each level.
+        Finally flags any time-of-day conflicts among the planned tasks. Mutates
+        and returns ``self``.
         """
         self.planned_tasks = []
         self.skipped_tasks = []
@@ -376,6 +397,9 @@ class Scheduler:
                 remaining -= task.duration_minutes
             else:
                 self.skipped_tasks.append(task)
+
+        # Present the chosen tasks priority-first, then chronologically.
+        self.planned_tasks = self.sort_by_priority_then_time(self.planned_tasks)
 
         self.detect_conflicts()
         return self

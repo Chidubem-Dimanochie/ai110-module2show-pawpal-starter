@@ -1,0 +1,70 @@
+classDiagram
+
+    class Owner {
+        +str name
+        +int minutes_available
+        +list~Pet~ pets
+        +add_pet(pet) None
+        +remove_pet(pet) None
+        +all_tasks() list~Task~
+        +filter_tasks(pet_name, done, priority) list~Task~
+        +due_tasks(today) list~Task~
+        +view_plan(pet) Scheduler
+    }
+
+    class Pet {
+        +str name
+        +str species
+        +str breed
+        +list~Task~ tasks
+        +add_task(task) None
+        +remove_task(task_id) None
+        +edit_task(task_id, **changes) None
+        +get_task(task_id) Task
+        +complete_task(task_id, on) Task
+        +pending_tasks() list~Task~
+        +completed_tasks() list~Task~
+    }
+
+    class Task {
+        +str title
+        +int duration_minutes
+        +str priority
+        +str frequency
+        +bool done
+        +str start_time
+        +str last_done
+        +str due_date
+        +int id
+        +mark_done(on) None
+        +edit(title, duration_minutes, priority, frequency, done, start_time) None
+        +start_minutes() int
+        +end_minutes() int
+        +overlaps(other) bool
+        +is_due(today) bool
+        +next_occurrence(completed_on) Task
+    }
+
+    class Scheduler {
+        +int time_budget
+        +Pet pet
+        +list~Task~ planned_tasks
+        +list~Task~ skipped_tasks
+        +list~tuple~ conflicts
+        +sort_by_priority(tasks) list~Task~
+        +sort_by_duration(tasks) list~Task~
+        +sort_by_time(tasks) list~Task~
+        +detect_conflicts(tasks) list~tuple~
+        +conflict_warnings(owner) list~str~
+        +generate_plan(tasks) Scheduler
+        +plan_for_owner(owner, today) Scheduler
+        +explain() str
+    }
+
+    Owner "1" o-- "*" Pet : owns
+    Pet "1" *-- "*" Task : has
+    Owner ..> Scheduler : creates (view_plan)
+    Scheduler ..> Owner : reads (plan_for_owner, conflict_warnings)
+    Scheduler "1" --> "0..1" Pet : optional focus
+    Scheduler ..> Task : sorts / plans / detects conflicts
+    Task ..> Task : next_occurrence spawns successor
