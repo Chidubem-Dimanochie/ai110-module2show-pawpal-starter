@@ -37,13 +37,10 @@ Yes. After reviewing my skeleton, I made four changes so the classes would actua
 
 I also added a `PRIORITY_ORDER` mapping so priority sorting is well-defined instead of relying on raw string comparison, and gave `Schedule` an optional reference to its `Pet` so a plan knows which pet it belongs to (useful for labeled output like "Daily plan for Biscuit").
 
-<!-- AI-ASSISTED NOTES (Phase 3 logic additions) — edit/trim as needed -->
-> **Phase 3 additions (AI-assisted, to fold into the write-up above):**
-> - **Sorting by time.** Added `Scheduler.sort_by_time()` (chronological by `start_time`) and `Scheduler.sort_by_duration()` (shortest-first) alongside the original `sort_by_priority()`. `sort_by_time` uses a `sorted()` lambda key on `start_minutes()` so untimed tasks fall to the end instead of raising a `TypeError` when `None` is compared to a string.
-> - **Filtering.** Added `Owner.filter_tasks(pet_name=, done=, priority=)` as one flexible entry point (any arg left `None` is ignored), plus `Pet.pending_tasks()` / `Pet.completed_tasks()` helpers.
-> - **Time-of-day + conflicts.** Gave `Task` an optional `start_time` ("HH:MM") with `start_minutes()`/`end_minutes()`/`overlaps()` helpers, and added `Scheduler.detect_conflicts()` which flags pairs of planned tasks whose windows overlap. It sorts by start time and breaks early once a task starts after the current one ends (avoids blind O(n²) checking). `explain()` now prints conflicts.
-> - **Recurring tasks.** The previously-unused `Task.frequency` now drives recurrence. Added `Task.due_date`, reworked `Task.is_due(today)` to a per-occurrence model (a done task is never due again; a pending one is due once `today` reaches its `due_date`), and added `Task.next_occurrence(completed_on)` — a factory that returns a fresh Task due `completed_on + timedelta(days=1)` (daily) or `+7` (weekly), or `None` for `"once"`.
-> - **Completion → regeneration.** Added `Pet.complete_task(task_id, on)` which marks a task done *and* auto-appends the next occurrence. This is where completion and `frequency` interact.
+During Phase 3, I expanded the scheduler with additional functionality. I added different sorting options, including sorting by time and duration, as well as flexible task filtering by pet, status, and priority. I also added time-based scheduling with conflict detection, allowing the system to identify overlapping tasks.
+
+I implemented recurring tasks by using task frequency to generate future occurrences after completion. Daily and weekly tasks now create new due dates automatically, while one-time tasks do not repeat. These changes made the scheduler more practical by improving organization, handling real scheduling scenarios, and supporting long-term task management.
+
 
 ---
 
@@ -54,87 +51,42 @@ I also added a `PRIORITY_ORDER` mapping so priority sorting is well-defined inst
 - What constraints does your scheduler consider (for example: time, priority, preferences)?
 - How did you decide which constraints mattered most?
 
-<!-- AI-ASSISTED NOTES — edit/trim as needed -->
-> **Constraints now considered (AI-assisted additions):** total time budget (`minutes_available`), task `priority` (via `PRIORITY_ORDER`), whether a task is already `done`, time of day / overlapping `start_time` windows (`detect_conflicts`), and recurrence — only tasks that are actually due today are planned when `plan_for_owner(owner, today=...)` is used.
+The scheduler considers factors like available time, task priority, completion status, scheduled times, and recurring tasks. I prioritized these constraints because they directly affect what tasks can realistically be completed in a day and help create a useful schedule for the owner.
 
 **b. Tradeoffs**
 
 - Describe one tradeoff your scheduler makes.
 - Why is that tradeoff reasonable for this scenario?
 
-<!-- AI-ASSISTED NOTES — edit/trim as needed -->
-> **Tradeoffs in the current logic (AI-assisted additions):**
-> - The planner still packs greedily by priority/budget and only *reports* time conflicts via `detect_conflicts()` / `conflict_warnings()` — it does not automatically reschedule overlapping tasks. Reasonable because surfacing the conflict lets the owner decide, which is simpler and more transparent than auto-moving tasks.
-> - **Lightweight conflict warnings.** `Scheduler.conflict_warnings(owner=None)` returns a list of plain warning *strings* (never raises), one per overlapping pair, labeling whether the clash is within one pet ("for Biscuit") or across two ("Biscuit vs Mochi"). Chose returning messages over throwing so the program keeps running and the UI/terminal can just print the warnings.
-
-<!-- Documented tradeoff (Step 5) — edit as needed -->
-> **One tradeoff, explained.** Conflict detection only looks at tasks that have an explicit `start_time`; a task with no fixed time can never trigger a warning, even if the day is over-booked. I chose to detect *overlapping durations* (start → start+duration) rather than only *exact* start-time matches, so a 30-min task starting at 08:00 correctly clashes with one at 08:15. The tradeoff is that untimed tasks are invisible to conflict checking — reasonable here because most flexible chores (grooming, play) genuinely don't have a fixed clock time, and forcing one on them would create false conflicts. A related tradeoff: `detect_conflicts()` compares every timed pair (O(n²)); I kept that for readability since a single day holds only a handful of timed tasks.
-> - `Pet.complete_task` leaves the finished instance in the list (marked done) *and* adds the successor, so completed tasks accumulate over time. Tradeoff: preserves history for `filter_tasks(done=True)` at the cost of a growing list.
-
+One tradeoff is that the scheduler reports time conflicts instead of automatically rescheduling tasks. This keeps the system simple and transparent by allowing the owner to decide how to handle conflicts rather than moving tasks without permission.
 ---
 
 ## 3. AI Collaboration
 
 **a. How you used AI**
+I used my AI coding assistant throughout every phase of the project. It helped brainstorm the class design, assisted with implementing and connecting features, and generated tests while suggesting edge cases I hadn't considered.
 
-I used my AI coding assistant across every phase, but for different jobs each time. In the
-**design** phase it was a brainstorming partner: I described the four classes and asked it to
-poke holes in the responsibilities before I wrote any logic. In the **build** phase it did
-multi-step refactoring and feature wiring — for example, connecting the `Scheduler` methods
-into `app.py` and keeping the UML source in sync with the final code. In the **testing** phase
-it generated the first pass of the pytest suite and brainstormed edge cases I hadn't considered
-(exact-fit budgets, adjacent-but-not-overlapping times, empty pet lists).
+The most helpful prompts were specific and based on my actual project files. Asking the AI to explain its code before I used it also helped me understand the implementation instead of simply copying it.
 
-The most helpful prompts were **specific and file-grounded**: attaching `pawpal_system.py` and
-asking a pointed question like *"what are the most important edge cases to test for a scheduler
-with sorting and recurring tasks?"* got far better answers than a vague *"write some tests."*
-Asking it to *explain* code before I saved it (rather than just accept it) was also key — it
-turned the assistant into a tutor instead of a black box.
 
 **b. Judgment and verification**
+I verified the AI's output by running the code, not just reading it. I made sure all tests passed with `pytest`, ran the application end-to-end, and checked that the behavior matched the intended design.
 
-I verified AI output by **running it**, not just reading it: every generated test had to pass
-(`python -m pytest`), and I ran `python main.py` end-to-end to confirm the behavior matched the
-description. When the assistant flagged a possible late-completion recurrence bug, I treated it
-as a claim to check rather than a fact — I traced `next_occurrence` myself and decided it was an
-*unspecified* behavior, not a defect, and left it documented instead of silently "fixing" it.
-
-One moment I did not accept a suggestion as-is: for `detect_conflicts`, the assistant proposed an
-early-exit sweep (sort by start time, then break out of the inner loop once a task starts after
-the current one ends) to avoid a blind O(n²) scan. I **rejected the optimization** and kept the
-plain `combinations()` version, because a single day only ever holds a handful of timed tasks, so
-the clever version added branching and off-by-one risk for a speedup nobody would ever notice.
-Keeping it simple made the method easier to read and test.
+One suggestion I chose not to follow was optimizing `detect_conflicts` with a more complex algorithm. Since the app only handles a small number of daily tasks, I kept the simpler implementation because it was easier to read, test, and maintain.
 
 **c. AI Strategy**
 
-*Which AI coding assistant features were most effective for building your scheduler?*
+**Which AI coding assistant features were most effective for building your scheduler?**
 
-Three features carried the most weight. (1) **File-attached chat / context** — pointing the
-assistant at `pawpal_system.py` so its suggestions matched my actual class names and signatures
-instead of a generic template. (2) **Agentic multi-file edits** — having it make coordinated
-changes across `app.py`, `tests/test_pawpal.py`, the UML `.mmd`, and the README in one pass,
-which kept everything consistent. (3) **Test scaffolding + edge-case brainstorming** — it turned
-9 starter tests into 27 by surfacing boundary cases (budget exactly equal to a task's duration,
-half-open time intervals, a pet with no tasks) that I would likely have missed.
+The most helpful features were attaching project files so the AI understood my actual codebase, making coordinated edits across multiple files to keep everything consistent, and generating tests with useful edge cases I might have overlooked.
 
-*One AI suggestion I rejected or modified to keep the design clean.*
+**One AI suggestion I rejected or modified to keep the design clean.**
 
-Beyond the `detect_conflicts` optimization above, the assistant at one point suggested letting the
-`Scheduler` automatically **reschedule** conflicting tasks. I modified that down to *reporting*
-conflicts only (`conflict_warnings` returns plain strings and never raises). Auto-rescheduling
-would have blurred the `Scheduler`'s responsibility — it should detect and explain, not silently
-move the owner's tasks around. Keeping "detect vs. decide" separate kept the class focused and the
-behavior transparent to the user.
+The AI suggested automatically rescheduling conflicting tasks, but I changed it to only report conflicts. This kept the `Scheduler` focused on detecting issues instead of making scheduling decisions for the user.
 
-*How separate chat sessions for different phases helped me stay organized.*
+**How separate chat sessions for different phases helped me stay organized.**
 
-I ran a different chat session per phase — design/UML, logic build, testing, UI, and docs. This
-kept each conversation's context tight, so the assistant wasn't juggling test details while I was
-still deciding class responsibilities. It also mirrored the project's phase structure, which made
-it easy to go back and re-read the reasoning behind one phase without scrolling through everything
-else, and it stopped the model from conflating concerns across phases (e.g., proposing UI code
-while I only wanted to talk about the data model).
+I used separate chat sessions for design, implementation, testing, UI, and documentation. This kept each conversation focused, made it easier to revisit earlier decisions, and prevented different parts of the project from getting mixed together.
 
 ---
 
@@ -145,13 +97,16 @@ while I only wanted to talk about the data model).
 - What behaviors did you test?
 - Why were these tests important?
 
-<!-- AI-ASSISTED NOTES — edit/trim as needed -->
-> **Tests added (AI-assisted, in `tests/test_pawpal.py`):** `sort_by_duration` ordering; `filter_tasks` by pet + status; `detect_conflicts` flagging overlapping start times; completing a daily task spawning a next occurrence due tomorrow (`test_completing_daily_task_spawns_next_occurrence`); a weekly successor being due `+7` days and not sooner; and a `"once"` task producing no successor. Suite is currently 8 passing tests.
+I tested the app's core features, including sorting, filtering, conflict detection, and recurring task behavior (daily, weekly, and one-time tasks). These tests were important because they verified the main functionality and helped catch bugs whenever changes were made.
 
 **b. Confidence**
 
 - How confident are you that your scheduler works correctly?
 - What edge cases would you test next if you had more time?
+
+I am fairly confident that the scheduler works correctly, around 4/5. The core features are well-tested, with all tests passing and coverage for important cases like sorting, budgeting, conflicts, and recurring tasks. I also verified the program by running it end-to-end and comparing the results with the expected behavior.
+
+I would still improve input validation and clarify some edge cases, such as late-completed recurring tasks, invalid times or durations, and tasks that cross midnight. These are not confirmed bugs, but areas where the behavior could be better defined.
 
 ---
 
@@ -161,10 +116,16 @@ while I only wanted to talk about the data model).
 
 - What part of this project are you most satisfied with?
 
+I was most satisfied with how the four classes remained organized as the system grew. Each class had a clear responsibility, which made adding features like sorting, conflict detection, and recurring tasks easier without rewriting existing code. Having 29 passing tests also gave me confidence that the different parts of the system worked together correctly.
+
 **b. What you would improve**
 
 - If you had another iteration, what would you improve or redesign?
 
+ I would add stronger input validation and define more edge cases, such as how late-completed recurring tasks should behave. I would also make the scheduling and display logic follow one consistent priority and time-based ordering rule to make the system easier to understand.
+
 **c. Key takeaway**
 
 - What is one important thing you learned about designing systems or working with AI on this project?
+
+My biggest takeaway is that good class design makes future changes much easier. I also learned that AI works best as a collaborator that helps explore ideas and find issues, but its suggestions still need to be tested and verified before being added.
